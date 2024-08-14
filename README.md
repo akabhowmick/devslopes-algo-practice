@@ -1,1 +1,1 @@
-This repo contains all the weekly algo practices problems and solutions for Devslopes 
+This repo contains all the weekly algo practices problems and solutions for Devslopes Weekly Algo Problems

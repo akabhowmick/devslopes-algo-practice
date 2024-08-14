@@ -12,5 +12,4 @@ def fizzBuzz():
         else:  # Print the number itself
             print(i)
 
-
 fizzBuzz()
