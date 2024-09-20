@@ -21,3 +21,9 @@ print(move_zeros([]))
 print(move_zeros([1, 0, 1]))
 print(move_zeros([1, 0, 1, 0]))
 print(move_zeros([0, 0, 1, 0, 2, 3, 0, 0, 0, 4, 5, 0]))
+
+# for i in array:
+#         if i == 0:
+#             array.remove(i) # Remove the element from the array
+#             array.append(i) # Append the element to the end
+#     return array
