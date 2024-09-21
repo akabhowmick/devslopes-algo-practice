@@ -3,182 +3,170 @@ import java.util.*;
 
 public class LeagueOrder {
 
-    // Team class to store the stats of each team
-    static class Team {
-
-        int id;         // Team ID
-        int points;     // Total points
-        int goalsFor;   // Goals scored
-        int goalsAgainst; // Goals conceded
-        int goalDifference; // Goal differential
-        int matchesPlayed; // Track if the team has played any match
-
-        public Team(int id) {
-            this.id = id;
-            this.points = 0;
-            this.goalsFor = 0;
-            this.goalsAgainst = 0;
-            this.goalDifference = 0;
-            this.matchesPlayed = 0;
-        }
-
-        // Method to update the stats based on the result of a match
-        public void updateStats(int goalsFor, int goalsAgainst) {
-            this.goalsFor += goalsFor;
-            this.goalsAgainst += goalsAgainst;
-            this.goalDifference = this.goalsFor - this.goalsAgainst;
-            this.matchesPlayed++;  // Team has played a match
-
-            if (goalsFor > goalsAgainst) {
-                this.points += 2; // 2 points for a win
-            } else if (goalsFor == goalsAgainst) {
-                this.points += 1; // 1 point each for a draw
-            }
-            // No points for a loss
-        }
-
-        // Method to check if teams are tied by main criteria
-        public boolean isTied(Team other) {
-            return this.points == other.points
-                    && this.goalDifference == other.goalDifference
-                    && this.goalsFor == other.goalsFor;
-        }
-
-        @Override
-        public String toString() {
-            return "Team " + id + ": Points=" + points + ", GD=" + goalDifference + ", GF=" + goalsFor + ", Played=" + matchesPlayed;
-        }
-    }
-
-    // Comparator to sort teams based on criteria
-    static Comparator<Team> teamComparator = (Team a, Team b) -> {
-        // First criteria: Points
-        if (b.points != a.points) {
-            return b.points - a.points;
-        }
-        // Second criteria: Goal difference
-        if (b.goalDifference != a.goalDifference) {
-            return b.goalDifference - a.goalDifference;
-        }
-        // Third criteria: Goals scored
-        if (b.goalsFor != a.goalsFor) {
-            return b.goalsFor - a.goalsFor;
-        }
-        // Otherwise, return 0 for equality
-        return 0;
-    };
-
-    // Main method to compute ranks
     public static int[] computeRanks(int number, int[][] games) {
-        Team[] teams = new Team[number];
-        for (int i = 0; i < number; i++) {
-            teams[i] = new Team(i);
+        List<Team> teams = new ArrayList<>();
+        for (int id = 0; id < number; id++) {
+            teams.add(new Team(id));
         }
-
-        // Process all games
         for (int[] game : games) {
-            int teamA = game[0];
-            int teamB = game[1];
-            int goalsA = game[2];
-            int goalsB = game[3];
-
-            // Update stats for both teams
-            teams[teamA].updateStats(goalsA, goalsB);
-            teams[teamB].updateStats(goalsB, goalsA);
+            Team home = teams.get(game[0]);
+            Team visi = teams.get(game[1]);
+            Result homeResult = home.getResults().get(visi.getId());
+            if (homeResult == null) {
+                homeResult = new Result();
+                home.getResults().put(visi.getId(), homeResult);
+            }
+            homeResult.takeGame(game[2], game[3]);
+            Result visiResult = visi.getResults().get(home.getId());
+            if (visiResult == null) {
+                visiResult = new Result();
+                visi.getResults().put(home.getId(), visiResult);
+            }
+            visiResult.takeGame(game[3], game[2]);
         }
-
-        // Sort teams based on points, goal difference, and goals scored
-        Arrays.sort(teams, teamComparator);
-
-        // Handle teams with no matches separately
-        handleNoMatches(teams);
-
-        // Create the result array based on sorted teams
         int[] result = new int[number];
-        for (int i = 0; i < number; i++) {
-            result[teams[i].id] = i + 1; // Rank is the index + 1
-        }
-
+        translateGroup(teams, 1, result);
         return result;
     }
 
-    // Function to handle ties using head-to-head comparisons
-    private static void resolveTies(Team[] teams, int[][] games) {
-        int n = teams.length;
-        List<Team> tieGroup = new ArrayList<>();
-        for (int i = 0; i < n;) {
-            tieGroup.clear();
-            tieGroup.add(teams[i]);
-
-            // Group teams that are tied
-            int j = i + 1;
-            while (j < n && teams[i].isTied(teams[j])) {
-                tieGroup.add(teams[j]);
-                j++;
-            }
-
-            // If there is more than one team tied, apply head-to-head
-            if (tieGroup.size() > 1) {
-                List<Team> sortedTieGroup = breakTieByHeadToHead(tieGroup, games);
-                for (int k = 0; k < sortedTieGroup.size(); k++) {
-                    teams[i + k] = sortedTieGroup.get(k);
-                }
-            }
-
-            i = j; // Move to the next group of teams
+    public static void translateGroup(List<Team> teams, int index, int[] result) {
+        if (teams.size() == 1) {
+            result[teams.get(0).getId()] = index;
+            return;
         }
-    }
-
-    // Handle teams that have not played any matches
-    private static void handleNoMatches(Team[] teams) {
-        int currentRank = 1;
-        for (int i = 0; i < teams.length; i++) {
-            if (teams[i].matchesPlayed == 0) {
-                teams[i].points = Integer.MIN_VALUE;  // Ensure unplayed teams rank at the bottom
-            } else {
-                currentRank = i + 1;  // Keep track of the correct rank
-            }
-        }
-
-        // Now assign proper rank to the unplayed teams
+        Set<Integer> ids = new HashSet<>();
         for (Team team : teams) {
-            if (team.matchesPlayed == 0) {
-                team.points = currentRank;
+            ids.add(team.getId());
+        }
+        for (Team team : teams) {
+            team.calculateGlobalResult(ids);
+        }
+        Collections.sort(teams);
+        Map<Integer, List<Team>> groups = new HashMap<>();
+        int idx = index;
+        List<Team> group = new ArrayList<>();
+        group.add(teams.get(0));
+        for (int i = 1; i < teams.size(); i++) {
+            if (teams.get(i).compareTo(teams.get(i - 1)) == 0) {
+                group.add(teams.get(i));
+            } else {
+                groups.put(idx, new ArrayList<>(group));
+                group = new ArrayList<>();
+                group.add(teams.get(i));
+                idx = index + i;
+            }
+        }
+        if (!group.isEmpty()) {
+            groups.put(idx, group);
+        }
+        if (groups.size() == 1) {
+            List<Team> same = groups.get(idx);
+            for (Team team : same) {
+                result[team.getId()] = idx;
+            }
+            return;
+        }
+        for (Map.Entry<Integer, List<Team>> entry : groups.entrySet()) {
+            translateGroup(entry.getValue(), entry.getKey(), result);
+        }
+    }
+
+}
+
+class Team implements Comparable<Team> {
+
+    private final int id;
+    private final Map<Integer, Result> results = new HashMap<>();
+    private Result globalResult = null;
+
+    Team(int id) {
+        this.id = id;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public Map<Integer, Result> getResults() {
+        return results;
+    }
+
+    public void calculateGlobalResult(Set<Integer> ids) {
+        globalResult = new Result();
+        for (Map.Entry<Integer, Result> entry : results.entrySet()) {
+            if (ids.contains(entry.getKey())) {
+                globalResult.mergeResult(entry.getValue());
             }
         }
     }
 
-    // Function to handle head-to-head tie-breaking for tied teams
-    private static List<Team> breakTieByHeadToHead(List<Team> tieGroup, int[][] games) {
-        // Map team id to head-to-head stats (points, goalsFor, goalsAgainst)
-        Map<Integer, Team> h2hStats = new HashMap<>();
-        for (Team team : tieGroup) {
-            h2hStats.put(team.id, new Team(team.id));
-        }
-
-        // Process only games between tied teams
-        for (int[] game : games) {
-            if (h2hStats.containsKey(game[0]) && h2hStats.containsKey(game[1])) {
-                int teamA = game[0];
-                int teamB = game[1];
-                int goalsA = game[2];
-                int goalsB = game[3];
-
-                h2hStats.get(teamA).updateStats(goalsA, goalsB);
-                h2hStats.get(teamB).updateStats(goalsB, goalsA);
-            }
-        }
-
-        // Create a list of teams with head-to-head stats and sort them
-        List<Team> sortedTieGroup = new ArrayList<>(tieGroup.size());
-        for (Team team : tieGroup) {
-            sortedTieGroup.add(h2hStats.get(team.id));
-        }
-
-        // Sort using the same comparator
-        sortedTieGroup.sort(teamComparator);
-
-        return sortedTieGroup;
+    @Override
+    public String toString() {
+        StringBuilder result = new StringBuilder();
+        result.append(id).append("x");
+        result.append(globalResult);
+        return result.toString();
     }
 
+    @Override
+    public int compareTo(Team o) {
+        return globalResult.compareTo(o.globalResult);
+    }
+}
+
+class Result implements Comparable<Result> {
+
+    private int pts;
+    private int gs;
+    private int gc;
+
+    Result() {
+    }
+
+    public void takeGame(int gs, int gc) {
+        this.gs += gs;
+        this.gc += gc;
+        if (gs > gc) {
+            pts += 2;
+        }
+        if (gs == gc) {
+            pts += 1;
+        }
+    }
+
+    public void mergeResult(Result result) {
+        pts += result.pts;
+        gs += result.gs;
+        gc += result.gc;
+    }
+
+    @Override
+    public String toString() {
+        return pts + ":" + gs + "-" + gc;
+    }
+
+    @Override
+    public int compareTo(Result o) {
+        if (pts > o.pts) {
+            return -1;
+        }
+        if (pts < o.pts) {
+            return 1;
+        }
+        int diff1 = gs - gc;
+        int diff2 = o.gs - o.gc;
+        if (diff1 > diff2) {
+            return -1;
+        }
+        if (diff1 < diff2) {
+            return 1;
+        }
+        if (gs > o.gs) {
+            return -1;
+        }
+        if (gs < o.gs) {
+            return 1;
+        }
+        return 0;
+    }
 }
