@@ -3,163 +3,182 @@ import java.util.*;
 
 public class LeagueOrder {
 
-    // Team statistics class to hold points, goals for, and against
-    static class TeamStats {
+    // Team class to store the stats of each team
+    static class Team {
 
-        int points;
-        int goalsFor;
-        int goalsAgainst;
+        int id;         // Team ID
+        int points;     // Total points
+        int goalsFor;   // Goals scored
+        int goalsAgainst; // Goals conceded
+        int goalDifference; // Goal differential
+        int matchesPlayed; // Track if the team has played any match
 
-        public TeamStats() {
+        public Team(int id) {
+            this.id = id;
             this.points = 0;
             this.goalsFor = 0;
             this.goalsAgainst = 0;
+            this.goalDifference = 0;
+            this.matchesPlayed = 0;
         }
 
-        // Goal difference
-        public int goalDifference() {
-            return goalsFor - goalsAgainst;
+        // Method to update the stats based on the result of a match
+        public void updateStats(int goalsFor, int goalsAgainst) {
+            this.goalsFor += goalsFor;
+            this.goalsAgainst += goalsAgainst;
+            this.goalDifference = this.goalsFor - this.goalsAgainst;
+            this.matchesPlayed++;  // Team has played a match
+
+            if (goalsFor > goalsAgainst) {
+                this.points += 2; // 2 points for a win
+            } else if (goalsFor == goalsAgainst) {
+                this.points += 1; // 1 point each for a draw
+            }
+            // No points for a loss
+        }
+
+        // Method to check if teams are tied by main criteria
+        public boolean isTied(Team other) {
+            return this.points == other.points
+                    && this.goalDifference == other.goalDifference
+                    && this.goalsFor == other.goalsFor;
+        }
+
+        @Override
+        public String toString() {
+            return "Team " + id + ": Points=" + points + ", GD=" + goalDifference + ", GF=" + goalsFor + ", Played=" + matchesPlayed;
         }
     }
 
+    // Comparator to sort teams based on criteria
+    static Comparator<Team> teamComparator = (Team a, Team b) -> {
+        // First criteria: Points
+        if (b.points != a.points) {
+            return b.points - a.points;
+        }
+        // Second criteria: Goal difference
+        if (b.goalDifference != a.goalDifference) {
+            return b.goalDifference - a.goalDifference;
+        }
+        // Third criteria: Goals scored
+        if (b.goalsFor != a.goalsFor) {
+            return b.goalsFor - a.goalsFor;
+        }
+        // Otherwise, return 0 for equality
+        return 0;
+    };
+
+    // Main method to compute ranks
     public static int[] computeRanks(int number, int[][] games) {
-        // Initialize team statistics
-        Map<Integer, TeamStats> teams = new HashMap<>();
+        Team[] teams = new Team[number];
         for (int i = 0; i < number; i++) {
-            teams.put(i, new TeamStats());
+            teams[i] = new Team(i);
         }
 
-        // Process each game
+        // Process all games
         for (int[] game : games) {
             int teamA = game[0];
             int teamB = game[1];
             int goalsA = game[2];
             int goalsB = game[3];
 
-            TeamStats statsA = teams.get(teamA);
-            TeamStats statsB = teams.get(teamB);
-
-            // Update goals for and against
-            statsA.goalsFor += goalsA;
-            statsA.goalsAgainst += goalsB;
-            statsB.goalsFor += goalsB;
-            statsB.goalsAgainst += goalsA;
-
-            // Update points
-            if (goalsA > goalsB) {  // Team A wins
-                statsA.points += 2;
-            } else if (goalsA < goalsB) {  // Team B wins
-                statsB.points += 2;
-            } else {  // Draw
-                statsA.points += 1;
-                statsB.points += 1;
-            }
+            // Update stats for both teams
+            teams[teamA].updateStats(goalsA, goalsB);
+            teams[teamB].updateStats(goalsB, goalsA);
         }
 
-        // Create a list of teams and their statistics
-        List<int[]> teamStats = new ArrayList<>();
+        // Sort teams based on points, goal difference, and goals scored
+        Arrays.sort(teams, teamComparator);
+
+        // Handle teams with no matches separately
+        handleNoMatches(teams);
+
+        // Create the result array based on sorted teams
+        int[] result = new int[number];
         for (int i = 0; i < number; i++) {
-            TeamStats stats = teams.get(i);
-            teamStats.add(new int[]{i, stats.points, stats.goalDifference(), stats.goalsFor});
+            result[teams[i].id] = i + 1; // Rank is the index + 1
         }
 
-        // Sort the teams by points, goal difference, and goals scored
-        teamStats.sort((a, b) -> {
-            if (b[1] != a[1]) {
-                return Integer.compare(b[1], a[1]);
-            }
-            if (b[2] != a[2]) {
-                return Integer.compare(b[2], a[2]);
-            }
-            return Integer.compare(b[3], a[3]);
-        });
+        return result;
+    }
 
-        // Initialize positions
-        int[] positions = new int[number];
+    // Function to handle ties using head-to-head comparisons
+    private static void resolveTies(Team[] teams, int[][] games) {
+        int n = teams.length;
+        List<Team> tieGroup = new ArrayList<>();
+        for (int i = 0; i < n;) {
+            tieGroup.clear();
+            tieGroup.add(teams[i]);
 
-        // Handle ties and head-to-head comparisons
-        int i = 0;
-        while (i < teamStats.size()) {
-            int j = i;
-
-            // Find the group of tied teams
-            while (j < teamStats.size() && Arrays.equals(Arrays.copyOfRange(teamStats.get(i), 1, 4),
-                    Arrays.copyOfRange(teamStats.get(j), 1, 4))) {
+            // Group teams that are tied
+            int j = i + 1;
+            while (j < n && teams[i].isTied(teams[j])) {
+                tieGroup.add(teams[j]);
                 j++;
             }
 
-            if (j - i > 1) {
-                // There's a tie, apply head-to-head comparison
-                List<Integer> tiedTeams = new ArrayList<>();
-                for (int k = i; k < j; k++) {
-                    tiedTeams.add(teamStats.get(k)[0]);
+            // If there is more than one team tied, apply head-to-head
+            if (tieGroup.size() > 1) {
+                List<Team> sortedTieGroup = breakTieByHeadToHead(tieGroup, games);
+                for (int k = 0; k < sortedTieGroup.size(); k++) {
+                    teams[i + k] = sortedTieGroup.get(k);
                 }
-
-                // Head-to-head stats
-                Map<Integer, TeamStats> headToHeadStats = new HashMap<>();
-                for (int team : tiedTeams) {
-                    headToHeadStats.put(team, new TeamStats());
-                }
-
-                // Calculate head-to-head stats for tied teams
-                for (int[] game : games) {
-                    int teamA = game[0];
-                    int teamB = game[1];
-                    int goalsA = game[2];
-                    int goalsB = game[3];
-
-                    if (tiedTeams.contains(teamA) && tiedTeams.contains(teamB)) {
-                        TeamStats statsA = headToHeadStats.get(teamA);
-                        TeamStats statsB = headToHeadStats.get(teamB);
-
-                        statsA.goalsFor += goalsA;
-                        statsA.goalsAgainst += goalsB;
-                        statsB.goalsFor += goalsB;
-                        statsB.goalsAgainst += goalsA;
-
-                        if (goalsA > goalsB) {
-                            statsA.points += 2;
-                        } else if (goalsA < goalsB) {
-                            statsB.points += 2;
-                        } else {
-                            statsA.points += 1;
-                            statsB.points += 1;
-                        }
-                    }
-                }
-
-                // Prepare list of tied teams with head-to-head stats
-                List<int[]> tiedTeamStats = new ArrayList<>();
-                for (int team : tiedTeams) {
-                    TeamStats stats = headToHeadStats.get(team);
-                    tiedTeamStats.add(new int[]{team, stats.points, stats.goalDifference(), stats.goalsFor});
-                }
-
-                // Sort based on head-to-head comparison
-                tiedTeamStats.sort((a, b) -> {
-                    if (b[1] != a[1]) {
-                        return Integer.compare(b[1], a[1]);  // Compare points
-
-                    }
-                    if (b[2] != a[2]) {
-                        return Integer.compare(b[2], a[2]);  // Compare goal difference
-
-                    }
-                    return Integer.compare(b[3], a[3]);                    // Compare goals scored
-                });
-
-                // Assign positions based on head-to-head
-                for (int k = 0; k < tiedTeamStats.size(); k++) {
-                    positions[tiedTeamStats.get(k)[0]] = i + k + 1;
-                }
-            } else {
-                // No tie, assign the position directly
-                positions[teamStats.get(i)[0]] = i + 1;
             }
 
-            i = j;
+            i = j; // Move to the next group of teams
+        }
+    }
+
+    // Handle teams that have not played any matches
+    private static void handleNoMatches(Team[] teams) {
+        int currentRank = 1;
+        for (int i = 0; i < teams.length; i++) {
+            if (teams[i].matchesPlayed == 0) {
+                teams[i].points = Integer.MIN_VALUE;  // Ensure unplayed teams rank at the bottom
+            } else {
+                currentRank = i + 1;  // Keep track of the correct rank
+            }
         }
 
-        return positions;
+        // Now assign proper rank to the unplayed teams
+        for (Team team : teams) {
+            if (team.matchesPlayed == 0) {
+                team.points = currentRank;
+            }
+        }
     }
+
+    // Function to handle head-to-head tie-breaking for tied teams
+    private static List<Team> breakTieByHeadToHead(List<Team> tieGroup, int[][] games) {
+        // Map team id to head-to-head stats (points, goalsFor, goalsAgainst)
+        Map<Integer, Team> h2hStats = new HashMap<>();
+        for (Team team : tieGroup) {
+            h2hStats.put(team.id, new Team(team.id));
+        }
+
+        // Process only games between tied teams
+        for (int[] game : games) {
+            if (h2hStats.containsKey(game[0]) && h2hStats.containsKey(game[1])) {
+                int teamA = game[0];
+                int teamB = game[1];
+                int goalsA = game[2];
+                int goalsB = game[3];
+
+                h2hStats.get(teamA).updateStats(goalsA, goalsB);
+                h2hStats.get(teamB).updateStats(goalsB, goalsA);
+            }
+        }
+
+        // Create a list of teams with head-to-head stats and sort them
+        List<Team> sortedTieGroup = new ArrayList<>(tieGroup.size());
+        for (Team team : tieGroup) {
+            sortedTieGroup.add(h2hStats.get(team.id));
+        }
+
+        // Sort using the same comparator
+        sortedTieGroup.sort(teamComparator);
+
+        return sortedTieGroup;
+    }
+
 }
