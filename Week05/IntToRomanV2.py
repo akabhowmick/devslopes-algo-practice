@@ -1,4 +1,5 @@
 def intToRoman(num: int) -> str:
+  # Mapping of integer values to their corresponding Roman numeral symbols
     val_to_roman = [
         (1000, "M"),
         (900, "CM"),
