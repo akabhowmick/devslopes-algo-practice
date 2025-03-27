@@ -1,0 +1,12 @@
+{
+  "name": "devslopes-algo",
+  "version": "1.0.0",
+  "description": "This repo contains all the weekly algo practices problems and solutions for Devslopes Weekly Algo Problems",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
